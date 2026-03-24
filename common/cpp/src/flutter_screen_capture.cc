@@ -2,6 +2,9 @@
 
 #include <stdexcept>
 
+#include "rtc_audio_source.h"
+#include "rtc_audio_track.h"
+
 namespace flutter_webrtc_plugin {
 
 FlutterScreenCapture::FlutterScreenCapture(FlutterWebRTCBase* base)
@@ -199,10 +202,6 @@ void FlutterScreenCapture::GetDisplayMedia(
   EncodableMap params;
   params[EncodableValue("streamId")] = EncodableValue(uuid);
 
-  // AUDIO
-
-  params[EncodableValue("audioTracks")] = EncodableValue(EncodableList());
-
   // VIDEO
 
   EncodableMap video_constraints;
@@ -259,29 +258,106 @@ void FlutterScreenCapture::GetDisplayMedia(
           desktop_capturer, video_source_label,
           base_->ParseMediaConstraints(video_constraints));
 
-  // TODO: RTCVideoSource -> RTCVideoTrack
-
-  scoped_refptr<RTCVideoTrack> track =
+  scoped_refptr<RTCVideoTrack> video_track =
       base_->factory_->CreateVideoTrack(video_source, uuid.c_str());
 
   EncodableList videoTracks;
-  EncodableMap info;
-  info[EncodableValue("id")] = EncodableValue(track->id().std_string());
-  info[EncodableValue("label")] = EncodableValue(track->id().std_string());
-  info[EncodableValue("kind")] = EncodableValue(track->kind().std_string());
-  info[EncodableValue("enabled")] = EncodableValue(track->enabled());
-  videoTracks.push_back(EncodableValue(info));
+  EncodableMap video_info;
+  video_info[EncodableValue("id")] = EncodableValue(video_track->id().std_string());
+  video_info[EncodableValue("label")] = EncodableValue(video_track->id().std_string());
+  video_info[EncodableValue("kind")] = EncodableValue(video_track->kind().std_string());
+  video_info[EncodableValue("enabled")] = EncodableValue(video_track->enabled());
+  videoTracks.push_back(EncodableValue(video_info));
   params[EncodableValue("videoTracks")] = EncodableValue(videoTracks);
 
-  stream->AddTrack(track);
+  stream->AddTrack(video_track);
+  base_->local_tracks_[video_track->id().std_string()] = video_track;
 
-  base_->local_tracks_[track->id().std_string()] = track;
+  ScreenShareSession session;
+  session.desktop_capturer = desktop_capturer;
+  session.video_track_id = video_track->id().std_string();
+
+  // AUDIO
+
+#ifdef __linux__
+  std::string audio_uuid = base_->GenerateUUID();
+
+  scoped_refptr<RTCAudioSource> audio_source =
+      base_->factory_->CreateAudioSource(
+          "screen_audio", RTCAudioSource::kCustom);
+
+  scoped_refptr<RTCAudioTrack> audio_track =
+      base_->factory_->CreateAudioTrack(audio_source, audio_uuid.c_str());
+
+  auto pulse_capturer = std::make_unique<PulseAudioCapturer>(
+      [audio_source](const void* data, size_t frames) {
+        audio_source->CaptureFrame(data, 16, 48000, 1, frames);
+      },
+      48000, 1);
+
+  if (pulse_capturer->Start()) {
+    EncodableList audioTracks;
+    EncodableMap audio_info;
+    audio_info[EncodableValue("id")] = EncodableValue(audio_track->id().std_string());
+    audio_info[EncodableValue("label")] = EncodableValue(audio_track->id().std_string());
+    audio_info[EncodableValue("kind")] = EncodableValue(audio_track->kind().std_string());
+    audio_info[EncodableValue("enabled")] = EncodableValue(audio_track->enabled());
+    audioTracks.push_back(EncodableValue(audio_info));
+    params[EncodableValue("audioTracks")] = EncodableValue(audioTracks);
+
+    stream->AddTrack(audio_track);
+    base_->local_tracks_[audio_track->id().std_string()] = audio_track;
+
+    session.audio_track_id = audio_track->id().std_string();
+    session.audio_source = audio_source;
+    session.pulse_capturer = std::move(pulse_capturer);
+  } else {
+    params[EncodableValue("audioTracks")] = EncodableValue(EncodableList());
+  }
+#else
+  params[EncodableValue("audioTracks")] = EncodableValue(EncodableList());
+#endif
+
+  std::string video_tid = session.video_track_id;
+  std::string audio_tid = session.audio_track_id;
+  active_sessions_[video_tid] = std::move(session);
+
+  base_->screen_share_cleanups_[video_tid] = [this, video_tid]() {
+    StopScreenShare(video_tid);
+  };
+  if (!audio_tid.empty()) {
+    base_->screen_share_cleanups_[audio_tid] = [this, video_tid]() {
+      StopScreenShare(video_tid);
+    };
+  }
 
   base_->local_streams_[uuid] = stream;
 
   desktop_capturer->Start(uint32_t(fps));
 
   result->Success(EncodableValue(params));
+}
+
+void FlutterScreenCapture::StopScreenShare(const std::string& track_id) {
+  auto it = active_sessions_.find(track_id);
+  if (it == active_sessions_.end()) return;
+
+  auto& session = it->second;
+
+#ifdef __linux__
+  if (session.pulse_capturer) {
+    session.pulse_capturer->Stop();
+  }
+#endif
+
+  if (session.desktop_capturer && session.desktop_capturer->IsRunning()) {
+    session.desktop_capturer->Stop();
+  }
+
+  base_->screen_share_cleanups_.erase(session.video_track_id);
+  base_->screen_share_cleanups_.erase(session.audio_track_id);
+
+  active_sessions_.erase(it);
 }
 
 }  // namespace flutter_webrtc_plugin

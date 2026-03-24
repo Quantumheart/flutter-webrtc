@@ -15,6 +15,9 @@ set(CMAKE_CXX_STANDARD 17)
 
 add_definitions(-DRTC_DESKTOP_DEVICE)
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse-simple libpulse)
+
 add_library(${PLUGIN_NAME} SHARED
   "../common/cpp/src/flutter_data_channel.cc"
   "../common/cpp/src/flutter_frame_cryptor.cc"
@@ -26,6 +29,7 @@ add_library(${PLUGIN_NAME} SHARED
   "../common/cpp/src/flutter_webrtc.cc"
   "../common/cpp/src/flutter_webrtc_base.cc"
   "../common/cpp/src/flutter_common.cc"
+  "../common/cpp/src/pulse_audio_capturer.cc"
   "flutter_webrtc_plugin.cc"
   "flutter/core_implementations.cc"
   "flutter/standard_codec.cc"
@@ -52,6 +56,7 @@ target_include_directories(${PLUGIN_NAME} INTERFACE
 )
 target_link_libraries(${PLUGIN_NAME} PRIVATE flutter)
 target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::GTK)
+target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::PULSE)
 
 
 target_link_libraries(${PLUGIN_NAME} PRIVATE 

@@ -555,6 +555,12 @@ void FlutterMediaStream::MediaStreamTrackDispose(
       }
     }
   }
+  auto cleanup_it = base_->screen_share_cleanups_.find(track_id);
+  if (cleanup_it != base_->screen_share_cleanups_.end()) {
+    auto fn = cleanup_it->second;
+    fn();
+  }
+
   base_->RemoveMediaTrackForId(track_id);
   result->Success();
 }
