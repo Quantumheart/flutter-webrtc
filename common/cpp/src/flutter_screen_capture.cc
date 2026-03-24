@@ -210,39 +210,37 @@ void FlutterScreenCapture::GetDisplayMedia(
     video_constraints = GetValue<EncodableMap>(it->second);
   }
 
-  scoped_refptr<MediaSource> source;
-  for (auto src : sources_) {
-    if (src->id().std_string() == source_id) {
-      source = src;
-    }
-  }
+  scoped_refptr<RTCDesktopCapturer> desktop_capturer;
 
 #ifdef __linux__
-  if (!source.get() && !sources_.empty()) {
-    source = sources_.front();
-  }
-  if (!source.get()) {
-    EncodableList types;
-    types.push_back(EncodableValue(std::string("screen")));
-    BuildDesktopSourcesList(types, true);
+  {
+    scoped_refptr<MediaSource> source;
     for (auto src : sources_) {
       if (src->id().std_string() == source_id) {
         source = src;
       }
     }
-    if (!source.get() && !sources_.empty()) {
-      source = sources_.front();
+    if (source.get()) {
+      desktop_capturer = base_->desktop_device_->CreateDesktopCapturer(source);
+    } else {
+      desktop_capturer = base_->desktop_device_->CreateDesktopCapturer(kScreen);
     }
   }
-#endif
-
-  if (!source.get()) {
-    result->Error("Bad Arguments", "source not found!");
-    return;
+#else
+  {
+    scoped_refptr<MediaSource> source;
+    for (auto src : sources_) {
+      if (src->id().std_string() == source_id) {
+        source = src;
+      }
+    }
+    if (!source.get()) {
+      result->Error("Bad Arguments", "source not found!");
+      return;
+    }
+    desktop_capturer = base_->desktop_device_->CreateDesktopCapturer(source);
   }
-
-  scoped_refptr<RTCDesktopCapturer> desktop_capturer =
-      base_->desktop_device_->CreateDesktopCapturer(source);
+#endif
 
   if (!desktop_capturer.get()) {
     result->Error("Bad Arguments", "CreateDesktopCapturer failed!");
