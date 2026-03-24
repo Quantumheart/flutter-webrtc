@@ -482,9 +482,6 @@ void FlutterMediaStream::MediaStreamDispose(
 
   for (auto track : audio_tracks.std_vector()) {
     stream->RemoveTrack(track);
-    if (track->enabled()) {
-      track->set_enabled(false);
-    }
     base_->local_tracks_.erase(track->id().std_string());
   }
 
@@ -539,9 +536,6 @@ void FlutterMediaStream::MediaStreamTrackDispose(
     auto audio_tracks = stream->audio_tracks();
     for (auto track : audio_tracks.std_vector()) {
       if (track->id().std_string() == track_id) {
-        if (track->enabled()) {
-          track->set_enabled(false);
-        }
         stream->RemoveTrack(track);
       }
     }
