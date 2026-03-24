@@ -47,7 +47,7 @@ void PulseAudioCapturer::CaptureLoop() {
       nullptr,
       "Lattice",
       PA_STREAM_RECORD,
-      nullptr,
+      "@DEFAULT_MONITOR@",
       "Screen Share Audio",
       &spec,
       nullptr,
@@ -76,6 +76,7 @@ void PulseAudioCapturer::CaptureLoop() {
 
   pa_simple_free(pa);
 }
+
 
 }  // namespace flutter_webrtc_plugin
 
