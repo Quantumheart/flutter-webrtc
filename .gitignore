@@ -29,3 +29,8 @@ migrate_working_dir/
 .flutter-plugins
 .flutter-plugins-dependencies
 build/
+
+# Downloaded libwebrtc binary artifacts
+third_party/downloads/
+third_party/libwebrtc/lib/
+third_party/libwebrtc/include/
